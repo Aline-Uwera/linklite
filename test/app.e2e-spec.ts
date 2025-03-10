@@ -1,13 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { AppModule } from '../src/app.module';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('UrlsController (e2e)', () => {
+  let app: INestApplication;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -16,10 +15,36 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('should create a shortened URL (POST /urls/shorten)', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/urls/shorten')
+      .send({ long_url: 'https://example.com' })
+      .expect(201);
+
+    expect(response.body).toHaveProperty('short_code');
+    expect(response.body.long_url).toBe('https://example.com');
+  });
+
+  it('should redirect a shortened URL (GET /urls/:shortUrl)', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/urls/shorten')
+      .send({ long_url: 'https://example.com' })
+      .expect(201);
+
+    const shortCode = createResponse.body.short_code;
+
+    const redirectResponse = await request(app.getHttpServer())
+      .get(`/urls/${shortCode}`)
+      .expect(302);
+
+    expect(redirectResponse.headers.location).toBe('https://example.com');
+  });
+
+  it('should return 404 for a non-existing short URL', async () => {
+    await request(app.getHttpServer()).get('/urls/nonexistent123').expect(404);
   });
 });
